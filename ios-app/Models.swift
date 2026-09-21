@@ -590,7 +590,7 @@ enum PasscodeThemePackager {
         var d = Data()
         d.appendLE32(0x04034b50)   // Local file header signature
         d.appendLE16(20)           // Version needed: 2.0
-        d.appendLE16(0)            // Flags
+        d.appendLE16(0x0800)       // Flags: UTF-8 file names (bit 11)
         d.appendLE16(0)            // Compression: stored
         d.appendLE16(0)            // Last mod time
         d.appendLE16(0)            // Last mod date
@@ -610,7 +610,7 @@ enum PasscodeThemePackager {
         d.appendLE32(0x02014b50)   // Central dir file header signature
         d.appendLE16(20)           // Version made by
         d.appendLE16(20)           // Version needed
-        d.appendLE16(0)            // Flags
+        d.appendLE16(0x0800)       // Flags: UTF-8 file names (bit 11)
         d.appendLE16(0)            // Compression: stored
         d.appendLE16(0)            // Last mod time
         d.appendLE16(0)            // Last mod date
