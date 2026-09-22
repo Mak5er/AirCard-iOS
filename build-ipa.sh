@@ -6,6 +6,14 @@ CONFIG="${1:-Release}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
+echo "==> Regenerating Xcode project from project.yml..."
+if ! command -v xcodegen >/dev/null 2>&1; then
+    echo "Error: XcodeGen is required so newly added sources and test targets are included."
+    echo "Install it with: brew install xcodegen"
+    exit 1
+fi
+xcodegen generate
+
 echo "==> Building AirCard-iOS ($CONFIG)..."
 rm -rf build/DerivedData build/Payload build/*.app build/*.ipa
 mkdir -p build

@@ -98,6 +98,19 @@ int32_t al_exploit_write_dir(const char *pairing_path,
                              void *ctx,
                              char **out_error);
 
+// Destructively export one device file to a local app path.
+// IMPORTANT: on success, `device_path` has been moved out of its original
+// location by ATAirlock. Its exact bytes are persisted at `output_path`.
+// The caller must replace or restore the device file as part of the same
+// higher-level transaction.
+// Returns 0 on success, 1 on error (with out_error set).
+int32_t al_exploit_export_file(const char *pairing_path,
+                               const char *device_path,
+                               const char *output_path,
+                               ALLogCallback log_cb,
+                               void *ctx,
+                               char **out_error);
+
 // Inject an entire directory `folder_path` into `target_parent_dir/dest_name` on the device.
 // Preserves complete folder hierarchy and all internal assets in one AirTraffic operation.
 // Returns 0 on success, 1 on error (with out_error set).

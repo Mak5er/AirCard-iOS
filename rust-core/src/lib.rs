@@ -5,6 +5,7 @@
 //!   al_pairing_run_host    — RPPairing host (blocks until paired)
 //!   al_pairing_result_free — free the ALPairResult heap strings
 //!   al_exploit_run         — run the AirTraffic exploit over the loopback tunnel
+//!   al_exploit_export_file — destructively export a device file to a local path
 //!   al_string_free         — free any char* returned by this library
 
 use std::ffi::{c_char, c_void};
@@ -14,6 +15,7 @@ pub mod ffi_util;
 pub mod grappa;
 pub mod logging;
 pub mod pairing;
+pub mod readback;
 
 // Re-export idevice-ffi's symbols into our staticlib (tunnel_create_rppairing,
 // afc_*, rsd_*, adapter_*, etc.) so Swift can call them directly.
@@ -162,6 +164,44 @@ pub unsafe extern "C" fn al_exploit_inject_folder(
         Err(e) => {
             if !out_error.is_null() {
                 *out_error = ffi_util::cstr(format!("Rust panic in al_exploit_inject_folder: {e:?}"));
+            }
+            1
+        }
+    }
+}
+
+/// Destructively export one device file to a local app path using AirTraffic.
+///
+/// A successful call moves `device_path` out of its original location and
+/// persists its exact bytes at `output_path`. The caller must replace or
+/// restore the device file as part of the surrounding transaction.
+///
+/// # Safety
+/// All pointer arguments must be null or valid for their documented use.
+#[no_mangle]
+pub unsafe extern "C" fn al_exploit_export_file(
+    pairing_path: *const c_char,
+    device_path: *const c_char,
+    output_path: *const c_char,
+    log_cb: readback::ALLogCallback,
+    ctx: *mut c_void,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        readback::export_file(
+            pairing_path,
+            device_path,
+            output_path,
+            log_cb,
+            ctx,
+            out_error,
+        )
+    }));
+    match res {
+        Ok(rc) => rc,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = ffi_util::cstr(format!("Rust panic in al_exploit_export_file: {e:?}"));
             }
             1
         }
@@ -385,4 +425,3 @@ pub unsafe extern "C" fn al_device_respring(
         }
     }
 }
-
