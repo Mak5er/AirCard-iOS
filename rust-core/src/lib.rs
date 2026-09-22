@@ -15,6 +15,36 @@ pub mod grappa;
 pub mod logging;
 pub mod pairing;
 
+/// Runs a managed wallpaper operation synchronously.
+///
+/// # Safety
+/// Input strings and callback context must remain valid for the duration of the
+/// call. Non-null output pointers must be writable; free returned strings with
+/// `al_string_free`.
+#[no_mangle]
+pub unsafe extern "C" fn al_template_operation(
+    pairing_path: *const c_char,
+    request_json: *const c_char,
+    log_cb: exploit::ALLogCallback,
+    ctx: *mut c_void,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        exploit::templates::run(pairing_path, request_json, log_cb, ctx, out_json, out_error)
+    })) {
+        Ok(rc) => rc,
+        Err(_) => {
+            if !out_error.is_null() {
+                *out_error = ffi_util::cstr(
+                    "Template operation interrupted; retain the installation record",
+                );
+            }
+            1
+        }
+    }
+}
+
 // Re-export idevice-ffi's symbols into our staticlib (tunnel_create_rppairing,
 // afc_*, rsd_*, adapter_*, etc.) so Swift can call them directly.
 #[allow(unused_imports)]
@@ -385,4 +415,3 @@ pub unsafe extern "C" fn al_device_respring(
         }
     }
 }
-

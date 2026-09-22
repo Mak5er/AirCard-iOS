@@ -14,6 +14,8 @@ struct TendiesView: View {
     @State private var showFilePicker = false
     @State private var selectedDetailItem: TendieItem? = nil
     @State private var isNeoSpringing = false
+    @State private var removalCandidate: TemplateInstallation?
+    @State private var libraryDeletionCandidate: TendieItem?
 
     private var selectedCount: Int {
         vm.tendieItems.filter { $0.isSelected }.count
@@ -63,26 +65,27 @@ struct TendiesView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.blue)
-                } footer: {
-                    if vm.posterBoardContainer.isEmpty {
-                        Text("PosterBoard container will be auto-detected automatically on flash.")
-                    } else {
-                        Text("Target: PosterBoard container detected ✅")
-                    }
+                    .disabled(vm.isDeviceOperationInProgress)
                 }
 
-                // Section 2: PosterBoard Options
-                Section {
-                    Toggle(isOn: $vm.resetPBProtections) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Force PosterBoard Cache Refresh")
-                                .font(.subheadline.weight(.medium))
-                            Text("Resets file protections so iOS re-indexes wallpapers immediately")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
+                Section("Connected Device") {
+                    if let device = vm.templateDevice {
+                        Text(device.name.isEmpty ? device.model : device.name).font(.headline)
+                        Text("\(device.model) · \(device.udid)").font(.caption).textSelection(.enabled)
+                    } else {
+                        Text("Connect LocalDevVPN and refresh to identify the target.").font(.caption)
                     }
+                    Button {
+                        Task { await vm.checkInstalledTemplates() }
+                    } label: {
+                        Label(
+                            vm.isCheckingTemplates ? "Checking…" : "Refresh Device & Templates",
+                            systemImage: "arrow.clockwise")
+                    }
+                    .disabled(vm.isDeviceOperationInProgress)
                 }
+
+                installedTemplatesSection
 
                 // Section 3: Wallpapers Gallery
                 if !vm.tendieItems.isEmpty {
@@ -99,17 +102,19 @@ struct TendiesView: View {
                                 }
                             }
                             .font(.caption)
+                            .disabled(vm.isDeviceOperationInProgress)
                         }
 
                         ForEach($vm.tendieItems) { $item in
                             TendieRowView(item: $item) {
                                 selectedDetailItem = item
                             } onDelete: {
-                                vm.deleteTendie(item: item)
+                                libraryDeletionCandidate = item
                             }
+                            .disabled(vm.isDeviceOperationInProgress)
                         }
                     } header: {
-                        Text("Wallpapers Gallery")
+                        Text("Imported Files")
                     }
                 } else {
                     Section {
@@ -137,7 +142,7 @@ struct TendiesView: View {
                             HStack(spacing: 10) {
                                 ProgressView()
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("Flashing Wallpapers…").font(.subheadline.bold())
+                                    Text("Updating Wallpapers…").font(.subheadline.bold())
                                     ProgressView(value: vm.tendiesFlashProgress)
                                 }
                             }
@@ -160,7 +165,8 @@ struct TendiesView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(.blue)
-                            .disabled(selectedCount == 0)
+                            .disabled(
+                                selectedCount == 0 || vm.isDeviceOperationInProgress || vm.templateJournalError != nil)
                         }
 
                         Button(role: .destructive) {
@@ -180,10 +186,13 @@ struct TendiesView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.red)
+                        .disabled(vm.isDeviceOperationInProgress)
                     }
                     .listRowInsets(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
                 } footer: {
-                    Text("Flashing will automatically trigger NeoSpring to respring the device and apply your new wallpapers.")
+                    Text(
+                        "Installing or removing templates always runs AirCard’s cache refresh and NeoSpring. Existing lock-screen wallpapers are kept. Removal order does not matter."
+                    )
                 }
 
                 // Section 5: Flash Log (CompactLogView)
@@ -210,6 +219,7 @@ struct TendiesView: View {
                         Image(systemName: "plus")
                             .font(.headline)
                     }
+                    .disabled(vm.isDeviceOperationInProgress)
                 }
             }
             .sheet(isPresented: $showFilePicker) {
@@ -222,17 +232,46 @@ struct TendiesView: View {
             .sheet(item: $selectedDetailItem) { item in
                 TendieDetailSheet(item: item)
             }
+            .confirmationDialog(
+                "Remove this installed template?",
+                isPresented: Binding(
+                    get: { removalCandidate != nil }, set: { if !$0 { removalCandidate = nil } }
+                ), titleVisibility: .visible
+            ) {
+                if let record = removalCandidate {
+                    Button("Remove Template & Respring", role: .destructive) {
+                        Task { await vm.removeInstalledTemplate(record) }
+                    }
+                }
+            } message: {
+                Text(
+                    "The imported template will disappear from Add New Wallpaper. Wallpapers already created from it are kept. AirCard will refresh and respring automatically."
+                )
+            }
+            .confirmationDialog(
+                "Delete imported file?",
+                isPresented: Binding(
+                    get: { libraryDeletionCandidate != nil }, set: { if !$0 { libraryDeletionCandidate = nil } }
+                ), titleVisibility: .visible
+            ) {
+                if let item = libraryDeletionCandidate {
+                    Button("Delete Local .tendies File", role: .destructive) { vm.deleteTendie(item: item) }
+                }
+            } message: {
+                Text(
+                    "This deletes the archive from AirCard. Use Installed Templates to remove a template from the system gallery."
+                )
+            }
             .onAppear {
                 vm.isNeoSpringing = false
                 isNeoSpringing = false
                 vm.showSuccessAlert = false
                 vm.successAlertMessage = ""
                 vm.scanDocumentsForTendies()
+                vm.reloadTemplateInstallations()
             }
             .task {
-                if vm.posterBoardContainer.isEmpty {
-                    await vm.autoDetectPosterBoardContainer(silent: true)
-                }
+                if vm.hasPairingFile { await vm.checkInstalledTemplates() }
             }
             .overlay {
                 if isNeoSpringing || vm.isNeoSpringing {
@@ -246,6 +285,61 @@ struct TendiesView: View {
             }
         }
     }
+
+    private var installedTemplatesSection: some View {
+        Section {
+            if let error = vm.templateJournalError {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
+            let records = vm.templateInstallations.filter { $0.phase != .removed }
+            if records.isEmpty {
+                Text("No templates recorded by this version.").foregroundStyle(.secondary)
+            }
+            ForEach(records) { record in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(record.name).font(.headline)
+                    Text("\(record.deviceName) · \(record.ownership.udid)").font(.caption2)
+                    Text(templateStatus(record)).font(.caption).foregroundStyle(.secondary)
+                    if let error = record.lastError { Text(error).font(.caption).foregroundStyle(.orange) }
+                    if record.ownership.udid == vm.templateDevice?.udid
+                        && record.ownership.container == vm.templateDevice?.container
+                    {
+                        HStack {
+                            Button("Remove Template", role: .destructive) { removalCandidate = record }
+                            if record.phase != .installed {
+                                Button(record.action == .remove ? "Continue Removal" : "Retry Refresh") {
+                                    Task { await vm.finishTemplateRefresh(record) }
+                                }
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(vm.isDeviceOperationInProgress || vm.templateJournalError != nil)
+                    } else {
+                        Text("Refresh the matching device to manage this record.").font(.caption2)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        } header: {
+            Text("Installed Templates")
+        } footer: {
+            Text(
+                "Only templates installed with tracking can be removed here. Keep AirCard installed to retain its removal records."
+            )
+        }
+    }
+
+    private func templateStatus(_ record: TemplateInstallation) -> String {
+        switch record.phase {
+        case .installed: return "Template written · Choose it in Wallpaper settings"
+        case .installing: return "Installation interrupted · Check or remove"
+        case .removing: return "Removal interrupted · Continue removal"
+        case .refreshPending: return "Refresh pending"
+        case .needsAttention: return "Needs attention · Record preserved"
+        case .removed: return "Removed"
+        }
+    }
+
 }
 
 // MARK: - Tendie Row View

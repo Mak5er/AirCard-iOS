@@ -69,13 +69,19 @@ final class AppViewModel: ObservableObject {
 
     // MARK: - Tendies / Wallpapers tab
     @Published var tendieItems: [TendieItem] = []
-    @Published var posterBoardContainer: String = ""
-    @Published var isDetectingContainer: Bool = false
-    @Published var resetPBProtections: Bool = true
     @Published var tendiesFlashPhase: FlashPhase = .idle
     @Published var tendiesFlashProgress: Double = 0
     @Published var tendiesFlashLog: [String] = []
     @Published var isNeoSpringing: Bool = false
+    @Published var templateInstallations: [TemplateInstallation] = []
+    @Published var templateDevice: TemplateDevice?
+    @Published var templateJournalError: String?
+    @Published var isCheckingTemplates = false
+
+    var isDeviceOperationInProgress: Bool {
+        tendiesFlashPhase == .running || cardFlashPhase == .running || passthmFlashPhase == .running
+            || isCheckingTemplates || isNeoSpringing
+    }
 
     // MARK: - AirCard UI States & Properties
     static var detectedDeviceLanguage: PasscodeLanguageTarget {
@@ -116,8 +122,8 @@ final class AppViewModel: ObservableObject {
         loadSavedCards()
         refreshNetworkStatus()
         scanDocumentsDirectory()
-        posterBoardContainer = UserDefaults.standard.string(forKey: "aircard.posterboard_container") ?? ""
         loadSavedTendies()
+        reloadTemplateInstallations()
 
         // Hook Rust log output into our log array.
         AppViewModel.sharedLogSink = { [weak self] line in
@@ -598,6 +604,7 @@ final class AppViewModel: ObservableObject {
     }
 
     func flashCards() {
+        guard !isDeviceOperationInProgress else { return }
         guard canFlashCards else { return }
         let selected = cards.filter { $0.isSelected && ($0.customImage != nil || $0.customImageData != nil) }
         guard !selected.isEmpty else { return }
@@ -860,6 +867,7 @@ final class AppViewModel: ObservableObject {
     }
 
     func flashPassthm() {
+        guard !isDeviceOperationInProgress else { return }
         guard canFlashPassthm else { return }
 
         let isCreator = (passcodeMode == .themeCreator)
@@ -1121,7 +1129,7 @@ final class AppViewModel: ObservableObject {
     }
 
     func importTendieFiles(urls: [URL]) async {
-        guard !urls.isEmpty else { return }
+        guard !urls.isEmpty, !isDeviceOperationInProgress else { return }
         var importedCount = 0
         var lastImportedName = ""
         for url in urls {
@@ -1143,43 +1151,96 @@ final class AppViewModel: ObservableObject {
     }
 
     func deleteTendie(item: TendieItem) {
-        try? FileManager.default.removeItem(at: item.fileURL)
-        tendieItems.removeAll(where: { $0.id == item.id })
-        saveTendieItems()
+        guard !isDeviceOperationInProgress else { return }
+        do {
+            guard try TendiesTemplateTransport.store.libraryDeletionAllowed(fileName: item.fileName) else {
+                throw TemplateFailure(
+                    message: "Remove the installed templates first. Their installation records must remain available.")
+            }
+            try FileManager.default.removeItem(at: item.fileURL)
+            tendieItems.removeAll(where: { $0.id == item.id })
+            saveTendieItems()
+        } catch { errorMessage = error.localizedDescription }
     }
 
-    func autoDetectPosterBoardContainer(silent: Bool = false) async {
-        let pairingPath = PairingController.pairingFilePath()
-        guard FileManager.default.fileExists(atPath: pairingPath) else {
-            if !silent {
-                await MainActor.run {
-                    self.errorMessage = "No pairing file active. Pair your device first in the Pairing tab."
-                }
-            }
-            return
-        }
-
-        await MainActor.run { self.isDetectingContainer = true }
-        defer {
-            Task { @MainActor in self.isDetectingContainer = false }
-        }
-
+    func reloadTemplateInstallations() {
         do {
-            let container = try await TendiesEngine.shared.detectPosterBoardContainer(pairingPath: pairingPath)
-            await MainActor.run {
-                self.posterBoardContainer = container
-                UserDefaults.standard.set(container, forKey: "aircard.posterboard_container")
-            }
+            templateInstallations = try TendiesTemplateTransport.store.load().sorted { $0.date > $1.date }
+            templateJournalError = nil
         } catch {
-            if !silent {
-                await MainActor.run {
-                    self.errorMessage = "Auto-detect failed: \(error.localizedDescription)\nEnsure LocalDevVPN is connected and device is unlocked."
-                }
+            templateJournalError =
+                "Could not read installation records: \(error.localizedDescription). Records were left untouched."
+        }
+    }
+
+    private func templateManager() -> TemplateManager {
+        let sink: (String) -> Void = { [weak self] in self?.tendiesFlashLog.append($0) }
+        return TemplateManager(
+            store: TendiesTemplateTransport.store,
+            transport: TendiesTemplateTransport(pairingPath: PairingController.pairingFilePath(), log: sink), log: sink)
+    }
+
+    func checkInstalledTemplates() async {
+        guard !isDeviceOperationInProgress else { return }
+        isCheckingTemplates = true
+        defer {
+            isCheckingTemplates = false
+            reloadTemplateInstallations()
+        }
+        do {
+            templateDevice = try await templateManager().verifyCurrentDevice()
+        } catch {
+            templateDevice = nil
+            errorMessage = "Could not check the device: \(error.localizedDescription)"
+        }
+    }
+
+    func removeInstalledTemplate(_ record: TemplateInstallation) async {
+        await runTemplateChange {
+            try await self.templateManager().remove(id: record.id)
+        }
+    }
+
+    func finishTemplateRefresh(_ record: TemplateInstallation) async {
+        await runTemplateChange {
+            if record.action == .remove {
+                try await self.templateManager().remove(id: record.id)
+            } else {
+                try await self.templateManager().finishInstalls([record.id])
             }
+        }
+    }
+
+    private func runTemplateChange(_ change: () async throws -> Void) async {
+        guard !isDeviceOperationInProgress, templateJournalError == nil else { return }
+        tendiesFlashPhase = .running
+        tendiesFlashProgress = 0
+        tendiesFlashLog = []
+        errorMessage = nil
+        do {
+            try await change()
+            tendiesFlashProgress = 1
+            tendiesFlashPhase = .done(ok: true)
+            reloadTemplateInstallations()
+            scheduleWallpaperRespring()
+        } catch {
+            tendiesFlashLog.append("Error: \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
+            tendiesFlashPhase = .done(ok: false)
+            reloadTemplateInstallations()
+        }
+    }
+
+    private func scheduleWallpaperRespring() {
+        tendiesFlashLog.append("Triggering AirCard NeoSpring to apply the template change…")
+        isNeoSpringing = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            RespringHelper.triggerNeoSpring()
         }
     }
 
     func flashSelectedTendies() async {
+        guard !isDeviceOperationInProgress, templateJournalError == nil else { return }
         let selected = tendieItems.filter { $0.isSelected }
         guard !selected.isEmpty else {
             errorMessage = "No wallpapers selected to flash."
@@ -1192,18 +1253,6 @@ final class AppViewModel: ObservableObject {
             return
         }
 
-        var container = posterBoardContainer.trimmingCharacters(in: .whitespacesAndNewlines)
-        if container.isEmpty {
-            do {
-                container = try await TendiesEngine.shared.detectPosterBoardContainer(pairingPath: pairingPath)
-                self.posterBoardContainer = container
-                UserDefaults.standard.set(container, forKey: "aircard.posterboard_container")
-            } catch {
-                errorMessage = "PosterBoard container could not be found automatically. Ensure LocalDevVPN is connected and iPhone is unlocked."
-                return
-            }
-        }
-
         tendiesFlashPhase = .running
         tendiesFlashProgress = 0
         tendiesFlashLog = []
@@ -1211,8 +1260,6 @@ final class AppViewModel: ObservableObject {
         do {
             try await TendiesEngine.shared.flashTendies(
                 items: selected,
-                containerPath: container,
-                resetProtections: resetPBProtections,
                 pairingPath: pairingPath,
                 log: { [weak self] line in
                     DispatchQueue.main.async {
@@ -1227,16 +1274,13 @@ final class AppViewModel: ObservableObject {
             )
             tendiesFlashPhase = .done(ok: true)
             tendiesFlashProgress = 1.0
-            tendiesFlashLog.append("🎉 Wallpapers applied successfully!")
-            tendiesFlashLog.append("⚡ Triggering NeoSpring respring...")
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-                self?.isNeoSpringing = true
-                RespringHelper.triggerNeoSpring()
-            }
+            reloadTemplateInstallations()
+            scheduleWallpaperRespring()
         } catch {
             tendiesFlashLog.append("❌ Error: \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
             tendiesFlashPhase = .done(ok: false)
+            reloadTemplateInstallations()
         }
     }
 
