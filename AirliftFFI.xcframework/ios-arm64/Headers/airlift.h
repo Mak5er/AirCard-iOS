@@ -148,6 +148,12 @@ int32_t al_device_respring(const char *pairing_path,
                           char **out_error);
 
 
+// Managed wallpaper operations (context/install/inspect/remove). JSON output
+// and error strings are owned by the caller; release with al_string_free.
+int32_t al_template_operation(const char *pairing_path, const char *request_json,
+                             ALLogCallback log_cb, void *ctx,
+                             char **out_json, char **out_error);
+
 #ifdef __cplusplus
 }
 #endif
