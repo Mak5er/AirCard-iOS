@@ -188,40 +188,6 @@ public final class TendiesEngine {
         }
     }
 
-    // MARK: - Auto-detect PosterBoard Container
-
-    public func detectPosterBoardContainer(pairingPath: String) async throws -> String {
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                var outContainer: UnsafeMutablePointer<CChar>? = nil
-                var outError: UnsafeMutablePointer<CChar>? = nil
-
-                let rc = pairingPath.withCString { pairC in
-                    "com.apple.PosterBoard".withCString { bundleC in
-                        al_find_app_container(pairC, bundleC, nil, nil, &outContainer, &outError)
-                    }
-                }
-
-                if rc == 0, let p = outContainer {
-                    let containerStr = String(cString: p)
-                    al_string_free(p)
-                    continuation.resume(returning: containerStr)
-                } else {
-                    let errStr = outError.flatMap { p in
-                        let s = String(cString: p)
-                        al_string_free(p)
-                        return s
-                    } ?? "Failed to find PosterBoard container"
-                    continuation.resume(throwing: NSError(
-                        domain: "TendiesEngine",
-                        code: Int(rc),
-                        userInfo: [NSLocalizedDescriptionKey: errStr]
-                    ))
-                }
-            }
-        }
-    }
-
     // MARK: - Send Respring Signal via Tunnel
 
     public func sendRespringSignal(pairingPath: String) async -> Bool {
@@ -241,10 +207,9 @@ public final class TendiesEngine {
 
     // MARK: - Flash Tendies to Device
 
+    @MainActor
     public func flashTendies(
         items: [TendieItem],
-        containerPath: String,
-        resetProtections: Bool,
         pairingPath: String,
         log: @escaping (String) -> Void,
         progress: @escaping (Double) -> Void
@@ -254,24 +219,11 @@ public final class TendiesEngine {
             return
         }
 
-        var normalizedContainer = containerPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalizedContainer.hasSuffix("/") {
-            normalizedContainer = String(normalizedContainer.dropLast())
-        }
-        if normalizedContainer.isEmpty {
-            throw NSError(
-                domain: "TendiesEngine",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "PosterBoard Container path is required."]
-            )
-        }
-
-        let majorVer = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
-        let structVersion = (majorVer <= 16) ? 59 : 61
-        let versionsToWrite: [Int] = [structVersion]
-
-        log("🚀 Starting PosterBoard injection into \(normalizedContainer)")
-        log("ℹ️ Target PosterBoard structure version: \(structVersion) (iOS \(majorVer))")
+        let transport = TendiesTemplateTransport(pairingPath: pairingPath, log: log)
+        let device = try await transport.context()
+        let manager = TemplateManager(store: TendiesTemplateTransport.store, transport: transport, log: log)
+        var installedIDs = Set<String>()
+        log("Target: \(device.name) · \(device.model) · \(device.udid)")
 
         let totalItems = Double(items.count)
 
@@ -291,12 +243,14 @@ public final class TendiesEngine {
                 }
             }
             guard extractRC == 0 else {
-                log("❌ Failed to extract '\(item.name)'")
-                continue
+                throw TemplateFailure(message: "Failed to extract \(item.name); no success was recorded.")
             }
 
             log("  🖼 Locating wallpaper descriptors…")
             let descriptors = findDescriptorsWithExtensions(in: tempStageDir, defaultExt: item.posterType.extensionBundleId)
+            guard !descriptors.isEmpty else {
+                throw TemplateFailure(message: "No wallpaper descriptors found in \(item.name).")
+            }
             log("  ✨ Found \(descriptors.count) descriptor(s) to install")
 
             for (descIndex, descItem) in descriptors.enumerated() {
@@ -305,36 +259,30 @@ public final class TendiesEngine {
                 log("  [\(descIndex + 1)/\(descriptors.count)] Descriptor \(targetUUID) (ID: \(randomizedID)) for \(descItem.ext)…")
 
                 // Update plist identifiers to ensure unique indexing without collisions
-                updatePlistIdentifiers(in: descItem.url, randomizedID: randomizedID)
+                try DescriptorPreparation.prepare(in: descItem.url, randomizedID: randomizedID)
 
-                for sVer in versionsToWrite {
-                    // Primary destination
-                    let targetParentDir = "\(normalizedContainer)/Library/Application Support/PRBPosterExtensionDataStore/\(sVer)/Extensions/\(descItem.ext)/descriptors"
-                    try await injectDescriptorFolder(
-                        folderURL: descItem.url,
-                        targetParentDir: targetParentDir,
-                        destName: targetUUID,
-                        pairingPath: pairingPath,
-                        log: log
-                    )
-
-                    // On iOS 18+, Collections was migrated to com.apple.Posters.CollectionsPosterApp
-                    if descItem.ext == "com.apple.WallpaperKit.CollectionsPoster" {
-                        let modernParentDir = "\(normalizedContainer)/Library/Application Support/PRBPosterExtensionDataStore/\(sVer)/Extensions/com.apple.Posters.CollectionsPosterApp/descriptors"
-                        try? await injectDescriptorFolder(
-                            folderURL: descItem.url,
-                            targetParentDir: modernParentDir,
-                            destName: targetUUID,
-                            pairingPath: pairingPath,
-                            log: log
-                        )
-                    }
-                }
+                let record = TemplateInstallation.make(
+                    name: item.name, fileName: item.fileName,
+                    device: device, descriptorID: targetUUID, numericID: randomizedID, provider: descItem.ext)
+                try await manager.stage(record, folder: descItem.url)
+                installedIDs.insert(record.id)
             }
 
             progress(Double(itemIndex + 1) / (totalItems + 1))
         }
 
+        try await manager.finishInstalls(installedIDs)
+        progress(1.0)
+        log("Templates written and refresh prepared. NeoSpring will apply the changes.")
+    }
+
+    // The original AirCard refresh payload and both destinations are shared by
+    // installation and removal. No preference snapshots or rollback stack.
+    func refreshPosterBoard(
+        containerPath: String, pairingPath: String,
+        log: @escaping (String) -> Void
+    ) async throws {
+        let normalizedContainer = containerPath
         // Always force PosterBoard cache refresh and file protections reset
         log("\n🔄 Forcing PosterBoard cache refresh and file protections reset…")
         let stagePrefDir = FileManager.default.temporaryDirectory
@@ -382,8 +330,6 @@ public final class TendiesEngine {
         )
         log("✅ PosterBoard preferences staged for reload")
 
-        progress(1.0)
-        log("\n🎉 All wallpapers injected successfully! Open Lock Screen settings or long-press lockscreen to choose your new wallpaper.")
     }
 
     // MARK: - Tree Writer Helper
@@ -473,95 +419,6 @@ public final class TendiesEngine {
                     userInfo: [NSLocalizedDescriptionKey: "Failed to write directory: \(errDesc ?? "exploit error")"]
                 )
             }
-        }
-    }
-
-    // MARK: - Plist Identifier Randomization (Matches Nugget implementation)
-
-    private func updatePlistIdentifiers(in folderURL: URL, randomizedID: Int) {
-        let fileManager = FileManager.default
-        guard let enumerator = fileManager.enumerator(
-            at: folderURL,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) else { return }
-
-        while let fileURL = enumerator.nextObject() as? URL {
-            let fileName = fileURL.lastPathComponent
-
-            if fileName == "com.apple.posterkit.provider.descriptor.identifier" {
-                try? "\(randomizedID)".data(using: .utf8)?.write(to: fileURL)
-            } else if fileName == "com.apple.posterkit.provider.contents.userInfo" {
-                if let data = try? Data(contentsOf: fileURL),
-                   var plist = (try? PropertyListSerialization.propertyList(from: data, options: .mutableContainers, format: nil)) as? [String: Any] {
-                    plist["wallpaperRepresentingIdentifier"] = randomizedID
-                    if let updated = try? PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0) {
-                        try? updated.write(to: fileURL)
-                    }
-                }
-            } else if fileName.hasSuffix("Wallpaper.plist") {
-                if let data = try? Data(contentsOf: fileURL),
-                   var plist = (try? PropertyListSerialization.propertyList(from: data, options: .mutableContainers, format: nil)) as? [String: Any] {
-                    plist["identifier"] = randomizedID
-                    if let updated = try? PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0) {
-                        try? updated.write(to: fileURL)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Folder Injector Helper (Single Atomic Move via AirTraffic)
-
-    private func injectDescriptorFolder(
-        folderURL: URL,
-        targetParentDir: String,
-        destName: String,
-        pairingPath: String,
-        log: @escaping (String) -> Void
-    ) async throws {
-        log("  📦 Injecting '\(destName)' into \(targetParentDir)…")
-        var errDesc: String? = nil
-        let ok: Bool = await withCheckedContinuation { cont in
-            DispatchQueue.global(qos: .userInitiated).async {
-                var outError: UnsafeMutablePointer<CChar>? = nil
-                let rc = pairingPath.withCString { pairC in
-                    folderURL.path.withCString { folderC in
-                        targetParentDir.withCString { parentC in
-                            destName.withCString { destC in
-                                al_exploit_inject_folder(
-                                    pairC,
-                                    folderC,
-                                    parentC,
-                                    destC,
-                                    { _, msg in
-                                        guard let msg = msg else { return }
-                                        let line = String(cString: msg)
-                                        DispatchQueue.main.async {
-                                            AppViewModel.shared?.tendiesFlashLog.append("    " + line)
-                                        }
-                                    },
-                                    nil,
-                                    &outError
-                                )
-                            }
-                        }
-                    }
-                }
-                if let p = outError {
-                    errDesc = String(cString: p)
-                    al_string_free(p)
-                }
-                cont.resume(returning: rc == 0)
-            }
-        }
-
-        if !ok {
-            throw NSError(
-                domain: "TendiesEngine",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Failed to inject descriptor: \(errDesc ?? "exploit error")"]
-            )
         }
     }
 
