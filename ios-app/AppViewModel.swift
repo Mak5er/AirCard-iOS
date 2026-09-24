@@ -67,6 +67,10 @@ final class AppViewModel: ObservableObject {
     @Published var passthmFlashProgress: Double = 0
     @Published var passthmFlashLog: [String] = []
 
+    // Stock passcode restoration
+    @Published var passthmRestorePhase: FlashPhase = .idle
+    @Published var passthmRestoreLog: [String] = []
+
     // MARK: - Tendies / Wallpapers tab
     @Published var tendieItems: [TendieItem] = []
     @Published var posterBoardContainer: String = ""
@@ -857,6 +861,326 @@ final class AppViewModel: ObservableObject {
         case .themeCreator:
             return !effectiveKeys.isEmpty
         }
+    }
+
+
+    var canRestorePassthm: Bool {
+        guard hasPairingFile,
+              passthmFlashPhase != .running,
+              passthmRestorePhase != .running else {
+            return false
+        }
+
+        switch passcodeMode {
+        case .applyTheme:
+            return loadedTheme != nil &&
+                   !(loadedTheme?.keysPreview.isEmpty ?? true)
+        case .themeCreator:
+            return !effectiveKeys.isEmpty
+        }
+    }
+
+    func restoreStockPasscode() {
+        guard canRestorePassthm else {
+            errorMessage = "Load the same .passthm theme first."
+            return
+        }
+
+        let digits: [String]
+
+        switch passcodeMode {
+        case .applyTheme:
+            guard let theme = loadedTheme else {
+                errorMessage = "Load the same .passthm theme first."
+                return
+            }
+            digits = Array(theme.keysPreview.keys)
+
+        case .themeCreator:
+            digits = Array(effectiveKeys.keys)
+        }
+
+        guard !digits.isEmpty else {
+            errorMessage = "No passcode keys available to identify the custom assets."
+            return
+        }
+
+        // Reproduce the exact filename-generation rules used by flashPassthm().
+        let targetLang = passcodeLanguageTarget
+        let targetBold = passcodeBoldTarget
+        let detected = AppViewModel.detectedDeviceLanguage.code
+
+        let langs: [String]
+
+        if targetLang == .all {
+            langs = KeypadLocales.all
+        } else {
+            var l = [targetLang.code]
+
+            if targetLang.code != "other" {
+                l.append("other")
+            }
+
+            if targetLang.code != detected &&
+               detected != "other" &&
+               !l.contains(detected) {
+                l.append(detected)
+            }
+
+            langs = l
+        }
+
+        let boldSuffixes: [String]
+
+        switch targetBold {
+        case .both:
+            boldSuffixes = ["", "-bold"]
+        case .boldOnly:
+            boldSuffixes = ["-bold"]
+        case .regularOnly:
+            boldSuffixes = [""]
+        }
+
+        var filenames = Set<String>()
+
+        for digit in digits {
+            let stdSubtext = KeypadLayout.subtexts[digit] ?? ""
+
+            for lang in langs {
+                for bld in boldSuffixes {
+                    if digit == "0" {
+                        filenames.insert("\(lang)-0---white\(bld).png")
+                        filenames.insert("\(lang)-0-+--white\(bld).png")
+
+                    } else if digit == "1" {
+                        filenames.insert("\(lang)-1---white\(bld).png")
+
+                    } else {
+                        filenames.insert(
+                            "\(lang)-\(digit)---white\(bld).png"
+                        )
+
+                        if !stdSubtext.isEmpty {
+                            filenames.insert(
+                                "\(lang)-\(digit)-\(stdSubtext)--white\(bld).png"
+                            )
+
+                            let noSpace = stdSubtext.replacingOccurrences(
+                                of: " ",
+                                with: ""
+                            )
+
+                            if noSpace != stdSubtext {
+                                filenames.insert(
+                                    "\(lang)-\(digit)-\(noSpace)--white\(bld).png"
+                                )
+                            }
+                        }
+
+                        if (lang == "ru" || targetLang == .all),
+                           let ruSub = KeypadLocales.cyrillicRU[digit] {
+                            filenames.insert(
+                                "\(lang)-\(digit)-\(ruSub)--white\(bld).png"
+                            )
+                        }
+
+                        if (lang == "uk" || targetLang == .all),
+                           let ukSub = KeypadLocales.cyrillicUK[digit] {
+                            filenames.insert(
+                                "\(lang)-\(digit)-\(ukSub)--white\(bld).png"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // AirCard also creates this marker during a normal passthm flash.
+        filenames.insert("_big")
+
+        let sortedNames = filenames.sorted()
+
+        let manifestDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "aircard_passcode_restore_\(UUID().uuidString)",
+                isDirectory: true
+            )
+
+        do {
+            try FileManager.default.createDirectory(
+                at: manifestDir,
+                withIntermediateDirectories: true
+            )
+
+            for filename in sortedNames {
+                let url = manifestDir.appendingPathComponent(filename)
+                try Data().write(to: url)
+            }
+        } catch {
+            errorMessage =
+                "Could not prepare the restore manifest: \(error.localizedDescription)"
+            return
+        }
+
+        let pairingPath = PairingController.pairingFilePath()
+        let targetVer = targetTelephonyVersion
+
+        let caches: [String]
+
+        if targetVer == "all" {
+            caches = [
+                "TelephonyUI-10",
+                "TelephonyUI-9",
+                "TelephonyUI-8"
+            ]
+        } else {
+            caches = [targetVer]
+        }
+
+        passthmRestorePhase = .running
+        passthmRestoreLog.removeAll()
+        errorMessage = nil
+
+        passthmRestoreLog.append(
+            "🔎 Identified \(sortedNames.count) custom passcode asset names."
+        )
+
+        passthmRestoreLog.append(
+            "📦 Matching assets will be moved to /var/mobile/Media before respring."
+        )
+
+        Task.detached { [weak self] in
+            var allOK = true
+            var backups: [String] = []
+
+            for cache in caches {
+                await MainActor.run {
+                    self?.passthmRestoreLog.append(
+                        "Backing up custom assets from \(cache)…"
+                    )
+                }
+
+                var outBackup: UnsafeMutablePointer<CChar>? = nil
+                var outError: UnsafeMutablePointer<CChar>? = nil
+
+                let rc = pairingPath.withCString { pairC in
+                    manifestDir.path.withCString { manifestC in
+                        cache.withCString { cacheC in
+                            al_exploit_backup_passcode_files(
+                                pairC,
+                                manifestC,
+                                cacheC,
+                                { _, msg in
+                                    guard let msg else { return }
+
+                                    let line = String(cString: msg)
+
+                                    DispatchQueue.main.async {
+                                        AppViewModel.shared?
+                                            .passthmRestoreLog
+                                            .append("    " + line)
+                                    }
+                                },
+                                nil,
+                                &outBackup,
+                                &outError
+                            )
+                        }
+                    }
+                }
+
+                let backupPrefix = outBackup.flatMap {
+                    String(validatingUTF8: $0)
+                }
+
+                let errorText = outError.flatMap {
+                    String(validatingUTF8: $0)
+                }
+
+                if let p = outBackup {
+                    al_string_free(p)
+                }
+
+                if let p = outError {
+                    al_string_free(p)
+                }
+
+                if rc == 0, let prefix = backupPrefix {
+                    backups.append(prefix)
+
+                    await MainActor.run {
+                        self?.passthmRestoreLog.append(
+                            "✅ \(cache): backup created (\(prefix))"
+                        )
+                    }
+
+                } else {
+                    allOK = false
+
+                    await MainActor.run {
+                        self?.passthmRestoreLog.append(
+                            "❌ \(cache): \(errorText ?? "operation failed")"
+                        )
+                    }
+                }
+            }
+
+            try? FileManager.default.removeItem(at: manifestDir)
+
+            await MainActor.run {
+                guard let self else { return }
+
+                if !backups.isEmpty {
+                    var saved = UserDefaults.standard.stringArray(
+                        forKey: "aircard.passcodeBackupPrefixes"
+                    ) ?? []
+
+                    for backup in backups where !saved.contains(backup) {
+                        saved.append(backup)
+                    }
+
+                    UserDefaults.standard.set(
+                        saved,
+                        forKey: "aircard.passcodeBackupPrefixes"
+                    )
+                }
+
+                if allOK {
+                    self.passthmRestorePhase = .done(ok: true)
+
+                    self.passthmRestoreLog.append(
+                        "✅ Custom theme assets backed up and removed from TelephonyUI."
+                    )
+
+                    self.passthmRestoreLog.append(
+                        "⚡ Ready to respring and let iOS reload the stock keypad."
+                    )
+
+                } else {
+                    self.passthmRestorePhase = .done(ok: false)
+
+                    self.errorMessage =
+                        """
+                        Passcode restore was incomplete.
+
+                        Some matching files may already have been moved into the backup area. Do not run Restore again until the log has been checked.
+                        """
+                }
+            }
+        }
+    }
+
+    func respringAfterPasscodeRestore() {
+        guard case .done(let ok) = passthmRestorePhase, ok else {
+            return
+        }
+
+        passthmRestoreLog.append(
+            "⚡ Triggering NeoSpring to reload the passcode keypad…"
+        )
+
+        isNeoSpringing = true
+        RespringHelper.triggerNeoSpring()
     }
 
     func flashPassthm() {
