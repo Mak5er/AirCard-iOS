@@ -1528,6 +1528,7 @@ struct ApplyThemeSection: View {
 
 struct PasscodeTargetSection: View {
     @EnvironmentObject var vm: AppViewModel
+    @State private var showRestoreConfirmation = false
 
     var body: some View {
         Section {
@@ -1606,8 +1607,92 @@ struct PasscodeTargetSection: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Stock Passcode")
+                        .font(.caption.bold())
+                        .foregroundColor(.secondary)
+
+                    if case .running = vm.passthmRestorePhase {
+                        HStack(spacing: 10) {
+                            ProgressView()
+
+                            Text("Backing up custom keypad assets…")
+                                .font(.subheadline)
+                        }
+
+                    } else {
+                        Button(role: .destructive) {
+                            showRestoreConfirmation = true
+                        } label: {
+                            Label(
+                                "Restore Stock Passcode",
+                                systemImage: "arrow.uturn.backward.circle"
+                            )
+                            .frame(
+                                maxWidth: .infinity,
+                                alignment: .center
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!vm.canRestorePassthm)
+                    }
+
+                    if case .done(let ok) = vm.passthmRestorePhase,
+                       ok {
+                        Button {
+                            vm.respringAfterPasscodeRestore()
+                        } label: {
+                            Label(
+                                "Respring for Stock Passcode",
+                                systemImage: "arrow.clockwise.circle.fill"
+                            )
+                            .frame(
+                                maxWidth: .infinity,
+                                alignment: .center
+                            )
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+
+                    if !vm.passthmRestoreLog.isEmpty {
+                        Text(
+                            vm.passthmRestoreLog
+                                .suffix(5)
+                                .joined(separator: "\n")
+                        )
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                    }
+                }
             }
             .padding(.vertical, 4)
+        }
+        .confirmationDialog(
+            "Restore the Apple passcode keypad?",
+            isPresented: $showRestoreConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(
+                "Back Up Theme & Restore Stock",
+                role: .destructive
+            ) {
+                vm.restoreStockPasscode()
+            }
+
+            Button("Cancel", role: .cancel) {}
+
+        } message: {
+            Text(
+                """
+                AirCard will move only the custom keypad files matching the currently loaded theme.
+
+                They will be backed up under /var/mobile/Media before you respring.
+                """
+            )
         }
     }
 }

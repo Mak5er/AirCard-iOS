@@ -113,6 +113,45 @@ pub unsafe extern "C" fn al_exploit_run(
     }
 }
 
+/// Back up known passcode theme assets from TelephonyUI into /var/mobile/Media.
+///
+/// `manifest_dir` supplies the exact filenames that are allowed to be moved.
+/// `cache_name` is restricted internally to TelephonyUI-8/9/10.
+#[no_mangle]
+pub unsafe extern "C" fn al_exploit_backup_passcode_files(
+    pairing_path: *const c_char,
+    manifest_dir: *const c_char,
+    cache_name: *const c_char,
+    log_cb: exploit::ALLogCallback,
+    ctx: *mut c_void,
+    out_backup_prefix: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        exploit::backup_passcode_files(
+            pairing_path,
+            manifest_dir,
+            cache_name,
+            log_cb,
+            ctx,
+            out_backup_prefix,
+            out_error,
+        )
+    }));
+
+    match res {
+        Ok(rc) => rc,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = ffi_util::cstr(format!(
+                    "Rust panic in al_exploit_backup_passcode_files: {e:?}"
+                ));
+            }
+            1
+        }
+    }
+}
+
 /// Write all files from `source_dir` into `target_dir` outside the sandbox via AirTraffic exploit.
 ///
 /// # Safety

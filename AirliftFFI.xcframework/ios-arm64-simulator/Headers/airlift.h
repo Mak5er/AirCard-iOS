@@ -89,6 +89,18 @@ int32_t al_exploit_run(const char *pairing_path,
                         char **out_json,
                         char **out_error);
 
+// Move the passcode-theme assets listed in manifest_dir out of a known
+// TelephonyUI cache and keep them as backups under /var/mobile/Media.
+// cache_name is restricted internally to TelephonyUI-8/9/10.
+// out_backup_prefix must be freed with al_string_free().
+int32_t al_exploit_backup_passcode_files(const char *pairing_path,
+                                         const char *manifest_dir,
+                                         const char *cache_name,
+                                         ALLogCallback log_cb,
+                                         void *ctx,
+                                         char **out_backup_prefix,
+                                         char **out_error);
+
 // Write all files from `source_dir` into `target_dir` on the device.
 // Returns 0 on success, 1 on error (with out_error set).
 int32_t al_exploit_write_dir(const char *pairing_path,
