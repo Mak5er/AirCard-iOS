@@ -153,9 +153,9 @@ struct CreditsSheet: View {
                                     .font(.title3)
                                     .foregroundStyle(.orange)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Core Exploit")
+                                    Text("Core Engine")
                                         .font(.subheadline.bold())
-                                    Text("airlift (AirTraffic sync sandbox escape)")
+                                    Text("airlift (AirTraffic sync)")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -422,7 +422,7 @@ struct PairingTab: View {
                                 .foregroundStyle(.blue)
                                 .clipShape(Capsule())
                         }
-                        Text("Apply custom wallet card skins and passcode themes on-device using the AirTraffic sandbox escape.")
+                        Text("Apply custom wallet card skins, passcode themes, and wallpapers on-device.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -440,7 +440,7 @@ struct PairingTab: View {
                         if vm.hasPairingFile {
                             Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Ready to exploit ✅")
+                                Text("Paired ✅")
                                     .font(.subheadline.bold())
                                 Text("\(vm.pairingFileName) (\(vm.pairingFileSizeString))")
                                     .font(.caption.monospaced())
@@ -649,7 +649,7 @@ struct VPNStatusRow: View {
                     Text(vm.vpnUp ? "Loopback VPN Active" : "Loopback VPN Not Detected")
                         .font(.subheadline.bold())
                     Text(vm.vpnUp
-                         ? "RSD tunnel ready — exploit will connect."
+                         ? "RSD tunnel ready."
                          : "Connect LocalDevVPN before running flashes.")
                         .font(.caption)
                         .foregroundStyle(.secondary)

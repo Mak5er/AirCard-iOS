@@ -35,7 +35,7 @@
 		<string>_aircardprobe._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>AirCard-iOS advertises an on-device pairing service so this iPhone can pair with itself, and connects to the local lockdown daemon to run the exploit.</string>
+	<string>AirCard-iOS advertises an on-device pairing service so this iPhone can pair with itself and apply custom themes on-device.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>AirCard-iOS needs photo access to apply custom card skins and passcode themes.</string>
 	<!-- Background: audio keeps the app alive while the user approves the PIN -->

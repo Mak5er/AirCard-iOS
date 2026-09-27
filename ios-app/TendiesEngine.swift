@@ -470,7 +470,7 @@ public final class TendiesEngine {
                 throw NSError(
                     domain: "TendiesEngine",
                     code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: "Failed to write directory: \(errDesc ?? "exploit error")"]
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to write directory: \(errDesc ?? "unknown error")"]
                 )
             }
         }
@@ -560,7 +560,7 @@ public final class TendiesEngine {
             throw NSError(
                 domain: "TendiesEngine",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Failed to inject descriptor: \(errDesc ?? "exploit error")"]
+                userInfo: [NSLocalizedDescriptionKey: "Failed to inject descriptor: \(errDesc ?? "unknown error")"]
             )
         }
     }

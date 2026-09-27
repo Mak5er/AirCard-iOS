@@ -689,7 +689,7 @@ final class AppViewModel: ObservableObject {
 
                 if !writeOk {
                     await MainActor.run {
-                        self.cardFlashLog.append("  ❌ Failed to write card skins: \(errDesc ?? "exploit error")")
+                        self.cardFlashLog.append("  ❌ Failed to write card skins: \(errDesc ?? "unknown error")")
                     }
                     continue
                 }
