@@ -1173,6 +1173,15 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func templateJournalExportData() -> Data? {
+        do {
+            return try TendiesTemplateTransport.store.exportCopy()
+        } catch {
+            errorMessage = "Could not export installation records: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
     private func templateManager() -> TemplateManager {
         let sink: (String) -> Void = { [weak self] in self?.tendiesFlashLog.append($0) }
         return TemplateManager(

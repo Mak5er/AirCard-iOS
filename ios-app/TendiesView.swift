@@ -16,6 +16,8 @@ struct TendiesView: View {
     @State private var isNeoSpringing = false
     @State private var removalCandidate: TemplateInstallation?
     @State private var libraryDeletionCandidate: TendieItem?
+    @State private var showJournalExporter = false
+    @State private var journalExportDocument: TemplateJournalDocument?
 
     private var selectedCount: Int {
         vm.tendieItems.filter { $0.isSelected }.count
@@ -232,6 +234,16 @@ struct TendiesView: View {
             .sheet(item: $selectedDetailItem) { item in
                 TendieDetailSheet(item: item)
             }
+            .fileExporter(
+                isPresented: $showJournalExporter,
+                document: journalExportDocument,
+                contentType: .json,
+                defaultFilename: "installed-templates.json"
+            ) { result in
+                if case .failure(let error) = result {
+                    vm.errorMessage = "Could not save the installation journal: \(error.localizedDescription)"
+                }
+            }
             .confirmationDialog(
                 "Remove this installed template?",
                 isPresented: Binding(
@@ -320,12 +332,39 @@ struct TendiesView: View {
                 }
                 .padding(.vertical, 4)
             }
+            Button {
+                if let data = vm.templateJournalExportData() {
+                    journalExportDocument = TemplateJournalDocument(data: data)
+                    showJournalExporter = true
+                }
+            } label: {
+                Label("Export Installation Journal", systemImage: "square.and.arrow.up")
+            }
+            .disabled(vm.isDeviceOperationInProgress)
         } header: {
             Text("Installed Templates")
         } footer: {
             Text(
-                "Only templates installed with tracking can be removed here. Keep AirCard installed to retain its removal records."
+                "Only tracked templates can be removed here. Export the journal before deleting AirCard; this version cannot import it after reinstalling."
             )
+        }
+    }
+
+    private struct TemplateJournalDocument: FileDocument {
+        static var readableContentTypes: [UTType] { [.json] }
+        var data: Data
+
+        init(data: Data) { self.data = data }
+
+        init(configuration: ReadConfiguration) throws {
+            guard let data = configuration.file.regularFileContents else {
+                throw TemplateFailure(message: "The installation journal is not a regular file.")
+            }
+            self.data = data
+        }
+
+        func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+            FileWrapper(regularFileWithContents: data)
         }
     }
 

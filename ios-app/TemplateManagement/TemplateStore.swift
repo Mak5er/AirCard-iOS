@@ -32,4 +32,12 @@ final class TemplateStore {
     func libraryDeletionAllowed(fileName: String) throws -> Bool {
         try !load().contains { $0.fileName == fileName && $0.phase != .removed }
     }
+
+    /// Return the journal bytes unchanged so a Files export can be kept before an app reinstall.
+    func exportCopy() throws -> Data {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw TemplateFailure(message: "There is no installation journal to export yet.")
+        }
+        return try Data(contentsOf: url)
+    }
 }
