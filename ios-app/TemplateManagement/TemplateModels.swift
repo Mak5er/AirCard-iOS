@@ -12,6 +12,7 @@ struct TemplateOwnership: Codable, Equatable {
     var installationID: String
     var descriptorID: String
     var numericID: Int
+    var providerIdentifier: String?
     var udid: String
     var container: String
 
@@ -20,6 +21,7 @@ struct TemplateOwnership: Codable, Equatable {
         case installationID = "installationId"
         case descriptorID = "descriptorId"
         case numericID = "numericId"
+        case providerIdentifier
     }
 }
 
@@ -35,6 +37,8 @@ struct TemplateInstallation: Codable, Identifiable, Equatable {
     var deviceName: String
     var name: String
     var fileName: String
+    /// SHA-256 of the imported archive, independent of its file name.
+    var archiveSHA256: String?
     /// Primary provider first; the Collections migration copy is optional.
     var providers: [String]
     var date = Date()
@@ -44,7 +48,8 @@ struct TemplateInstallation: Codable, Identifiable, Equatable {
 
     static func make(
         name: String, fileName: String, device: TemplateDevice,
-        descriptorID: String, numericID: Int, provider: String
+        descriptorID: String, numericID: Int, provider: String,
+        providerIdentifier: String? = nil, archiveSHA256: String
     ) -> Self {
         var providers = [provider]
         if provider == "com.apple.WallpaperKit.CollectionsPoster" {
@@ -53,8 +58,10 @@ struct TemplateInstallation: Codable, Identifiable, Equatable {
         return Self(
             ownership: .init(
                 installationID: UUID().uuidString, descriptorID: descriptorID,
-                numericID: numericID, udid: device.udid, container: device.container),
-            deviceName: device.name, name: name, fileName: fileName, providers: providers)
+                numericID: numericID, providerIdentifier: providerIdentifier,
+                udid: device.udid, container: device.container),
+            deviceName: device.name, name: name, fileName: fileName,
+            archiveSHA256: archiveSHA256, providers: providers)
     }
 }
 

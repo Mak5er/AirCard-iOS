@@ -1283,6 +1283,11 @@ final class AppViewModel: ObservableObject {
             )
             tendiesFlashPhase = .done(ok: true)
             tendiesFlashProgress = 1.0
+            let flashedFiles = Set(selected.map(\.fileName))
+            for index in tendieItems.indices where flashedFiles.contains(tendieItems[index].fileName) {
+                tendieItems[index].isSelected = false
+            }
+            saveTendieItems()
             reloadTemplateInstallations()
             scheduleWallpaperRespring()
         } catch {

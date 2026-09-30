@@ -1,8 +1,21 @@
 import Foundation
 
 enum DescriptorPreparation {
-    static func prepare(in folderURL: URL, randomizedID: Int) throws {
+    static func prepare(in folderURL: URL, randomizedID: Int, provider: String) throws -> String? {
         let fileManager = FileManager.default
+        if provider == "com.apple.MercuryPoster" {
+            let identifierURL = folderURL.appendingPathComponent("com.apple.posterkit.provider.descriptor.identifier")
+            guard
+                let data = try? Data(contentsOf: identifierURL),
+                let identifier = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                identifier.range(of: #"^[A-Za-z0-9._-]{1,64}$"#, options: .regularExpression) != nil
+            else {
+                throw TemplateFailure(message: "Mercury descriptor identifier is missing or invalid.")
+            }
+            // Mercury chooses its renderer from this identifier (for example d23).
+            // Keep its provider-owned contents.userInfo and suggestion metadata intact.
+            return identifier
+        }
         guard
             let enumerator = fileManager.enumerator(
                 at: folderURL,
@@ -39,5 +52,6 @@ enum DescriptorPreparation {
         guard foundIdentifier else {
             throw TemplateFailure(message: "This archive does not contain a complete template descriptor.")
         }
+        return nil
     }
 }

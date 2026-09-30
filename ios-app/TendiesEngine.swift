@@ -8,6 +8,7 @@
 import UIKit
 import Foundation
 import AirliftFFI
+import CryptoKit
 
 public final class TendiesEngine {
     public static let shared = TendiesEngine()
@@ -222,12 +223,39 @@ public final class TendiesEngine {
         let transport = TendiesTemplateTransport(pairingPath: pairingPath, log: log)
         let device = try await transport.context()
         let manager = TemplateManager(store: TendiesTemplateTransport.store, transport: transport, log: log)
+        let activeRecords = try manager.store.load().filter {
+            $0.ownership.udid == device.udid && $0.ownership.container == device.container
+                && $0.phase != .removed
+        }
+        let activeFiles = Set(activeRecords.map(\.fileName))
+        var activeHashes = Set(activeRecords.compactMap(\.archiveSHA256))
+        // Older journal entries have no hash. Hash their imported files when available.
+        for fileName in activeFiles where !activeRecords.contains(where: {
+            $0.fileName == fileName && $0.archiveSHA256 != nil
+        }) {
+            guard fileName == URL(fileURLWithPath: fileName).lastPathComponent else { continue }
+            let url = Self.tendiesStorageDirectory.appendingPathComponent(fileName)
+            if FileManager.default.fileExists(atPath: url.path) {
+                activeHashes.insert(try Self.archiveSHA256(at: url))
+            }
+        }
+        let itemHashes = try items.map { try Self.archiveSHA256(at: $0.fileURL) }
+        var selectedHashes = Set<String>()
+        let duplicates = zip(items, itemHashes).compactMap { item, hash -> String? in
+            let repeated = !selectedHashes.insert(hash).inserted
+            return activeFiles.contains(item.fileName) || activeHashes.contains(hash) || repeated
+                ? item.name : nil
+        }
+        guard duplicates.isEmpty else {
+            throw TemplateFailure(message: "Already installed or selected twice: \(duplicates.joined(separator: ", ")). Remove the installed template before flashing it again, or deselect it to flash other files.")
+        }
         var installedIDs = Set<String>()
         log("Target: \(device.name) · \(device.model) · \(device.udid)")
 
         let totalItems = Double(items.count)
 
         for (itemIndex, item) in items.enumerated() {
+            let archiveSHA256 = itemHashes[itemIndex]
             log("\n📦 [\(itemIndex + 1)/\(items.count)] Processing '\(item.name)'…")
 
             let tempStageDir = FileManager.default.temporaryDirectory
@@ -259,11 +287,14 @@ public final class TendiesEngine {
                 log("  [\(descIndex + 1)/\(descriptors.count)] Descriptor \(targetUUID) (ID: \(randomizedID)) for \(descItem.ext)…")
 
                 // Update plist identifiers to ensure unique indexing without collisions
-                try DescriptorPreparation.prepare(in: descItem.url, randomizedID: randomizedID)
+                let providerIdentifier = try DescriptorPreparation.prepare(
+                    in: descItem.url, randomizedID: randomizedID, provider: descItem.ext)
 
                 let record = TemplateInstallation.make(
                     name: item.name, fileName: item.fileName,
-                    device: device, descriptorID: targetUUID, numericID: randomizedID, provider: descItem.ext)
+                    device: device, descriptorID: targetUUID, numericID: randomizedID,
+                    provider: descItem.ext, providerIdentifier: providerIdentifier,
+                    archiveSHA256: archiveSHA256)
                 try await manager.stage(record, folder: descItem.url)
                 installedIDs.insert(record.id)
             }
@@ -274,6 +305,16 @@ public final class TendiesEngine {
         try await manager.finishInstalls(installedIDs)
         progress(1.0)
         log("Templates written and refresh prepared. NeoSpring will apply the changes.")
+    }
+
+    private static func archiveSHA256(at url: URL) throws -> String {
+        let file = try FileHandle(forReadingFrom: url)
+        defer { try? file.close() }
+        var hasher = SHA256()
+        while let chunk = try file.read(upToCount: 1024 * 1024), !chunk.isEmpty {
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     // The original AirCard refresh payload and both destinations are shared by
