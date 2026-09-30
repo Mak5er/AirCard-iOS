@@ -9,32 +9,44 @@
 /* Begin PBXBuildFile section */
 		010AC8DF1C1EED48625C6675 /* TendiesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81FCB10A2F3D7CEAED486771 /* TendiesModel.swift */; };
 		2298380CF8CA245F06A363A1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D0F9F55D9C9EC2D4AE16F004 /* Assets.xcassets */; };
+		3AB01AE36E3B5535BAEA55BC /* TemplateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D54EEB5736A0ADFAB1CD158 /* TemplateStore.swift */; };
 		49063A6C03B1966F92F0915B /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DCB2FCB8D4F45B9474A81BC /* AppViewModel.swift */; };
 		5BCE478E71F6959C81AEF206 /* AirliftFFI.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4FEDEA9266429D393E42942F /* AirliftFFI.xcframework */; };
 		6565B7F0AF43443DACB0FB9D /* NetworkStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 920112F6B415C22F51326996 /* NetworkStatus.swift */; };
 		668FC8BDB3F10AEBFB427382 /* AirCardApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A31F22848A9E3B541A9ADF5 /* AirCardApp.swift */; };
 		771980AD8A57F84F9D2B30DC /* Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30060FC4F88D7BF91C2DCD5E /* Utilities.swift */; };
 		80E5245336B574F61E0D3194 /* TendiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A416E9FC1E5258B289C6DA54 /* TendiesView.swift */; };
+		87BF794A1F22D784DDA81A21 /* TemplateTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D4B529339CB0C6315244EAA /* TemplateTransport.swift */; };
 		8AC8E2DE3BA40D3721CFC50D /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 988BAD6580C0B7784B5F4759 /* Models.swift */; };
+		8D23772F153ED95203354C39 /* TemplateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4848BFB96B8EDD91DA672F5F /* TemplateManager.swift */; };
+		99ADEECAA8465CD56BF2832F /* TemplateModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1D298F791C5E5EB0C9AA43 /* TemplateModels.swift */; };
+		A4A46DAA40A6F7295A6CBA6F /* DescriptorPreparation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F3B1B78E16CDF68CFBEFE60 /* DescriptorPreparation.swift */; };
 		AC3136B63574B3DA733C8214 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E001E5A3AA0793BBC1F623A7 /* ContentView.swift */; };
 		D01333FE5D76673B726EC922 /* TendiesEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54463055E9590B0A928A2697 /* TendiesEngine.swift */; };
 		D1372A9BF5FAB71669756638 /* GrappaHelper.m in Sources */ = {isa = PBXBuildFile; fileRef = CCEE0E39AF8DEAE3E55A456C /* GrappaHelper.m */; };
 		E2028685627EA8F9A2BF1732 /* PairingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A02FDAA5E5C8719C39DA4E6C /* PairingController.swift */; };
 		F425EA3763995D85ABFBB99B /* RespringHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 744597D526DCBE3516400831 /* RespringHelper.swift */; };
+		FA14BC5400A9CE28B9F253F8 /* TendiesTemplateTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02FCB83CBD697A15AAFA8DF5 /* TendiesTemplateTransport.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		02FCB83CBD697A15AAFA8DF5 /* TendiesTemplateTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TendiesTemplateTransport.swift; sourceTree = "<group>"; };
 		0A31F22848A9E3B541A9ADF5 /* AirCardApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirCardApp.swift; sourceTree = "<group>"; };
+		1D54EEB5736A0ADFAB1CD158 /* TemplateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplateStore.swift; sourceTree = "<group>"; };
 		30060FC4F88D7BF91C2DCD5E /* Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utilities.swift; sourceTree = "<group>"; };
+		4848BFB96B8EDD91DA672F5F /* TemplateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplateManager.swift; sourceTree = "<group>"; };
 		4FEDEA9266429D393E42942F /* AirliftFFI.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = AirliftFFI.xcframework; sourceTree = "<group>"; };
 		54463055E9590B0A928A2697 /* TendiesEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TendiesEngine.swift; sourceTree = "<group>"; };
 		55D5D94AD6F7BB50166EAAA8 /* AirCard-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "AirCard-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6DCB2FCB8D4F45B9474A81BC /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
 		744597D526DCBE3516400831 /* RespringHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RespringHelper.swift; sourceTree = "<group>"; };
 		81FCB10A2F3D7CEAED486771 /* TendiesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TendiesModel.swift; sourceTree = "<group>"; };
+		8A1D298F791C5E5EB0C9AA43 /* TemplateModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplateModels.swift; sourceTree = "<group>"; };
 		8EF8BF3979E64C5575AD150E /* GrappaHelper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GrappaHelper.h; sourceTree = "<group>"; };
 		920112F6B415C22F51326996 /* NetworkStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkStatus.swift; sourceTree = "<group>"; };
 		988BAD6580C0B7784B5F4759 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		9D4B529339CB0C6315244EAA /* TemplateTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplateTransport.swift; sourceTree = "<group>"; };
+		9F3B1B78E16CDF68CFBEFE60 /* DescriptorPreparation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DescriptorPreparation.swift; sourceTree = "<group>"; };
 		A02FDAA5E5C8719C39DA4E6C /* PairingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingController.swift; sourceTree = "<group>"; };
 		A416E9FC1E5258B289C6DA54 /* TendiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TendiesView.swift; sourceTree = "<group>"; };
 		CCEE0E39AF8DEAE3E55A456C /* GrappaHelper.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = GrappaHelper.m; sourceTree = "<group>"; };
@@ -80,6 +92,18 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		B55677B6D19C8F079E97F0E7 /* TemplateManagement */ = {
+			isa = PBXGroup;
+			children = (
+				9F3B1B78E16CDF68CFBEFE60 /* DescriptorPreparation.swift */,
+				4848BFB96B8EDD91DA672F5F /* TemplateManager.swift */,
+				8A1D298F791C5E5EB0C9AA43 /* TemplateModels.swift */,
+				1D54EEB5736A0ADFAB1CD158 /* TemplateStore.swift */,
+				9D4B529339CB0C6315244EAA /* TemplateTransport.swift */,
+			);
+			path = TemplateManagement;
+			sourceTree = "<group>";
+		};
 		D6E48EFDA14D810D89B9AE80 /* ios-app */ = {
 			isa = PBXGroup;
 			children = (
@@ -96,8 +120,10 @@
 				744597D526DCBE3516400831 /* RespringHelper.swift */,
 				54463055E9590B0A928A2697 /* TendiesEngine.swift */,
 				81FCB10A2F3D7CEAED486771 /* TendiesModel.swift */,
+				02FCB83CBD697A15AAFA8DF5 /* TendiesTemplateTransport.swift */,
 				A416E9FC1E5258B289C6DA54 /* TendiesView.swift */,
 				30060FC4F88D7BF91C2DCD5E /* Utilities.swift */,
+				B55677B6D19C8F079E97F0E7 /* TemplateManagement */,
 			);
 			path = "ios-app";
 			sourceTree = "<group>";
@@ -177,13 +203,19 @@
 				668FC8BDB3F10AEBFB427382 /* AirCardApp.swift in Sources */,
 				49063A6C03B1966F92F0915B /* AppViewModel.swift in Sources */,
 				AC3136B63574B3DA733C8214 /* ContentView.swift in Sources */,
+				A4A46DAA40A6F7295A6CBA6F /* DescriptorPreparation.swift in Sources */,
 				D1372A9BF5FAB71669756638 /* GrappaHelper.m in Sources */,
 				8AC8E2DE3BA40D3721CFC50D /* Models.swift in Sources */,
 				6565B7F0AF43443DACB0FB9D /* NetworkStatus.swift in Sources */,
 				E2028685627EA8F9A2BF1732 /* PairingController.swift in Sources */,
 				F425EA3763995D85ABFBB99B /* RespringHelper.swift in Sources */,
+				8D23772F153ED95203354C39 /* TemplateManager.swift in Sources */,
+				99ADEECAA8465CD56BF2832F /* TemplateModels.swift in Sources */,
+				3AB01AE36E3B5535BAEA55BC /* TemplateStore.swift in Sources */,
+				87BF794A1F22D784DDA81A21 /* TemplateTransport.swift in Sources */,
 				D01333FE5D76673B726EC922 /* TendiesEngine.swift in Sources */,
 				010AC8DF1C1EED48625C6675 /* TendiesModel.swift in Sources */,
+				FA14BC5400A9CE28B9F253F8 /* TendiesTemplateTransport.swift in Sources */,
 				80E5245336B574F61E0D3194 /* TendiesView.swift in Sources */,
 				771980AD8A57F84F9D2B30DC /* Utilities.swift in Sources */,
 			);

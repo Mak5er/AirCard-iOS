@@ -353,7 +353,13 @@ struct ContentView: View {
     @EnvironmentObject var vm: AppViewModel
 
     var body: some View {
-        TabView(selection: $vm.selectedTab) {
+        TabView(
+            selection: Binding(
+                get: { vm.selectedTab },
+                set: { tab in
+                    if !vm.isDeviceOperationInProgress { vm.selectedTab = tab }
+                })
+        ) {
             PairingTab()
                 .tabItem { Label("Pairing", systemImage: "antenna.radiowaves.left.and.right") }
                 .tag(AppTab.pairing)

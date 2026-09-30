@@ -23,8 +23,8 @@ echo "==> Installing iOS targets (if needed)"
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim 2>/dev/null || true
 
 echo "==> Building Rust static libs (release)"
-cargo build --release --target aarch64-apple-ios
-cargo build --release --target aarch64-apple-ios-sim
+cargo build --locked --release --target aarch64-apple-ios
+cargo build --locked --release --target aarch64-apple-ios-sim
 
 cd "$ROOT"
 echo "==> Repackaging AirliftFFI.xcframework"

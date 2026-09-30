@@ -15,6 +15,36 @@ pub mod grappa;
 pub mod logging;
 pub mod pairing;
 
+/// Runs a managed wallpaper operation synchronously.
+///
+/// # Safety
+/// Input strings and callback context must remain valid for the duration of the
+/// call. Non-null output pointers must be writable; free returned strings with
+/// `al_string_free`.
+#[no_mangle]
+pub unsafe extern "C" fn al_template_operation(
+    pairing_path: *const c_char,
+    request_json: *const c_char,
+    log_cb: exploit::ALLogCallback,
+    ctx: *mut c_void,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        exploit::templates::run(pairing_path, request_json, log_cb, ctx, out_json, out_error)
+    })) {
+        Ok(rc) => rc,
+        Err(_) => {
+            if !out_error.is_null() {
+                *out_error = ffi_util::cstr(
+                    "Template operation interrupted; retain the installation record",
+                );
+            }
+            1
+        }
+    }
+}
+
 // Re-export idevice-ffi's symbols into our staticlib (tunnel_create_rppairing,
 // afc_*, rsd_*, adapter_*, etc.) so Swift can call them directly.
 #[allow(unused_imports)]
@@ -276,7 +306,7 @@ pub unsafe extern "C" fn al_passthm_extract(
 }
 
 /// Extract all files and directories from a zip archive into `dest_dir`.
-/// Preserves directory hierarchies and skips unsafe path traversals.
+/// Preserves directory hierarchies and rejects unsafe or oversized archives.
 /// Returns 0 on success.
 #[no_mangle]
 pub unsafe extern "C" fn al_zip_extract_all(
@@ -303,39 +333,201 @@ pub unsafe extern "C" fn al_zip_extract_all(
             Err(_) => return 3,
         };
 
+        const MAX_ENTRIES: usize = 4096;
+        const MAX_ENTRY_SIZE: u64 = 1024 * 1024 * 1024;
+        const MAX_TOTAL_SIZE: u64 = 2 * MAX_ENTRY_SIZE;
+        const MAX_RATIO: u64 = 200;
+        if archive.len() > MAX_ENTRIES {
+            return 5;
+        }
+        let mut names = std::collections::HashSet::new();
+        let mut declared_total = 0u64;
+        // Check the whole archive before writing any file.
+        for i in 0..archive.len() {
+            let file = match archive.by_index(i) {
+                Ok(f) => f,
+                Err(_) => return 3,
+            };
+            let name: std::path::PathBuf = match file.enclosed_name() {
+                Some(n) => n
+                    .components()
+                    .filter_map(|part| match part {
+                        std::path::Component::Normal(value) => Some(value),
+                        _ => None,
+                    })
+                    .collect(),
+                None => return 5,
+            };
+            if name.as_os_str().is_empty() {
+                return 5;
+            }
+            let name_str = name.to_string_lossy();
+            if name_str.contains("__MACOSX") || name_str.ends_with(".DS_Store") {
+                continue;
+            }
+            if !names.insert(name) {
+                return 5;
+            }
+            if let Some(mode) = file.unix_mode() {
+                let kind = mode & 0o170000;
+                if kind != 0 && kind != 0o100000 && kind != 0o040000 {
+                    return 5;
+                }
+            }
+            if !file.is_dir() {
+                let size = file.size();
+                if size > MAX_ENTRY_SIZE {
+                    return 5;
+                }
+                declared_total = match declared_total.checked_add(size) {
+                    Some(total) if total <= MAX_TOTAL_SIZE => total,
+                    _ => return 5,
+                };
+                if size > 1024 * 1024
+                    && (file.compressed_size() == 0
+                        || size > file.compressed_size().saturating_mul(MAX_RATIO))
+                {
+                    return 5;
+                }
+            }
+        }
+
         let dest = std::path::Path::new(&dest_dir);
         if std::fs::create_dir_all(dest).is_err() {
             return 4;
         }
-
+        let mut extracted_total = 0u64;
         for i in 0..archive.len() {
             let mut file = match archive.by_index(i) {
                 Ok(f) => f,
-                Err(_) => continue,
+                Err(_) => return 3,
             };
-            let name = match file.enclosed_name() {
-                Some(n) => n.to_owned(),
-                None => continue,
+            let name: std::path::PathBuf = match file.enclosed_name() {
+                Some(n) => n
+                    .components()
+                    .filter_map(|part| match part {
+                        std::path::Component::Normal(value) => Some(value),
+                        _ => None,
+                    })
+                    .collect(),
+                None => return 5,
             };
+            if name.as_os_str().is_empty() {
+                return 5;
+            }
             let name_str = name.to_string_lossy();
             if name_str.contains("__MACOSX") || name_str.ends_with(".DS_Store") {
                 continue;
             }
             let outpath = dest.join(&name);
             if file.is_dir() {
-                let _ = std::fs::create_dir_all(&outpath);
+                if std::fs::create_dir_all(&outpath).is_err() {
+                    return 4;
+                }
             } else {
                 if let Some(parent) = outpath.parent() {
-                    let _ = std::fs::create_dir_all(parent);
+                    if std::fs::create_dir_all(parent).is_err() {
+                        return 4;
+                    }
                 }
-                if let Ok(mut outfile) = std::fs::File::create(&outpath) {
-                    let _ = std::io::copy(&mut file, &mut outfile);
+                let mut outfile = match std::fs::File::create(&outpath) {
+                    Ok(out) => out,
+                    Err(_) => return 4,
+                };
+                let remaining = MAX_TOTAL_SIZE - extracted_total;
+                let limit = MAX_ENTRY_SIZE.min(remaining) + 1;
+                let copied = match std::io::copy(
+                    &mut std::io::Read::take(&mut file, limit),
+                    &mut outfile,
+                ) {
+                    Ok(bytes) => bytes,
+                    Err(_) => return 4,
+                };
+                if copied > MAX_ENTRY_SIZE || copied > remaining || copied != file.size() {
+                    return 5;
                 }
+                extracted_total += copied;
             }
         }
         0
     }));
     res.unwrap_or(1)
+}
+
+#[cfg(test)]
+mod zip_extract_tests {
+    use super::al_zip_extract_all;
+    use std::ffi::CString;
+    use std::io::Write;
+
+    fn fixture(name: &str) -> std::path::PathBuf {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "aircard-zip-{name}-{}-{nonce}",
+            std::process::id()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        root
+    }
+
+    fn extract(root: &std::path::Path) -> i32 {
+        let archive = CString::new(root.join("test.zip").to_str().unwrap()).unwrap();
+        let dest = CString::new(root.join("out").to_str().unwrap()).unwrap();
+        unsafe { al_zip_extract_all(archive.as_ptr(), dest.as_ptr()) }
+    }
+
+    #[test]
+    fn extracts_a_small_archive() {
+        let root = fixture("small");
+        let file = std::fs::File::create(root.join("test.zip")).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        zip.start_file(
+            "Descriptors/Face.plist",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
+        zip.write_all(b"sample").unwrap();
+        zip.finish().unwrap();
+        assert_eq!(extract(&root), 0);
+        assert_eq!(
+            std::fs::read(root.join("out/Descriptors/Face.plist")).unwrap(),
+            b"sample"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_duplicate_paths_before_writing() {
+        let root = fixture("duplicate");
+        let file = std::fs::File::create(root.join("test.zip")).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        for name in ["Face.plist", "./Face.plist"] {
+            zip.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+            zip.write_all(b"sample").unwrap();
+        }
+        zip.finish().unwrap();
+        assert_ne!(extract(&root), 0);
+        assert!(!root.join("out").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_extreme_compression_before_writing() {
+        let root = fixture("ratio");
+        let file = std::fs::File::create(root.join("test.zip")).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        zip.start_file("Face.dat", options).unwrap();
+        zip.write_all(&vec![0; 2 * 1024 * 1024]).unwrap();
+        zip.finish().unwrap();
+        assert_ne!(extract(&root), 0);
+        assert!(!root.join("out").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
 
 /// Query InstallationProxy over the pairing tunnel for an application's Container directory path.
@@ -385,4 +577,3 @@ pub unsafe extern "C" fn al_device_respring(
         }
     }
 }
-
