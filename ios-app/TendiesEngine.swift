@@ -37,14 +37,14 @@ public final class TendiesEngine {
 
         if sourceURL.standardizedFileURL.path != destinationURL.standardizedFileURL.path {
             if FileManager.default.fileExists(atPath: destinationURL.path) {
-                try? FileManager.default.removeItem(at: destinationURL)
+                throw TemplateFailure(message: "A wallpaper named \(fileName) is already imported. Rename the new file before importing it.")
             }
-            do {
-                try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
-            } catch {
-                let fileData = try Data(contentsOf: sourceURL)
-                try fileData.write(to: destinationURL, options: .atomic)
-            }
+            let stagingURL = Self.tendiesStorageDirectory
+                .appendingPathComponent(".import-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: stagingURL) }
+            try FileManager.default.copyItem(at: sourceURL, to: stagingURL)
+            // moveItem refuses an occupied destination, including a concurrent import.
+            try FileManager.default.moveItem(at: stagingURL, to: destinationURL)
         }
 
         guard FileManager.default.fileExists(atPath: destinationURL.path) else {
