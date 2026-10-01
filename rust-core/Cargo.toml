@@ -26,12 +26,18 @@ idevice = { git = "https://github.com/jkcoxson/idevice.git", rev = "7bd551c16c6d
   "installation_proxy",
 ] }
 
-# idevice-ffi for tunnel_create_rppairing + AFC C FFI (re-exports its #[no_mangle] symbols).
-# Use full feature set (matching SideInstaller's proven config) so idevice-ffi's
-# internal cross-module imports resolve. We re-export its #[no_mangle] symbols.
-idevice-ffi = { path = "vendor/idevice-ffi", features = [
-  "full",
+# idevice-ffi is used only for its Rust tunnel helpers and runtime bridge.
+# Do not compile the upstream `full` feature, which also exposes unrelated
+# backup/restore, app-management, packet-capture, diagnostics, and process APIs.
+idevice-ffi = { path = "vendor/idevice-ffi", default-features = false, features = [
   "aws-lc",
+  "core_device_proxy",
+  "remote_pairing",
+  "rsd",
+  "tcp",
+  "tunnel_tcp_stack",
+  "usbmuxd",
+  "xpc",
 ] }
 
 tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "fs", "time"] }
