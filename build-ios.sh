@@ -7,9 +7,12 @@ set -euo pipefail
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
 export IPHONEOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-18.0}"
 
-# Make ~/.cargo visible to non-login shells (Xcode build phases, CI)
+# Make ~/.cargo visible to non-login shells (Xcode build phases, CI).
+# Bash exits immediately when `source` targets a missing file, even with `|| true`.
 # shellcheck disable=SC1090
-source "$HOME/.cargo/env" 2>/dev/null || true
+if [[ -f "$HOME/.cargo/env" ]]; then
+  source "$HOME/.cargo/env"
+fi
 
 # Remap $HOME so absolute source paths don't appear in the binary's log output
 export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=${HOME}=/build"
