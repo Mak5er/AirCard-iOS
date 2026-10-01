@@ -89,7 +89,9 @@ impl RpPairingFile {
     /// Parse from plist bytes (XML or binary).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, IdeviceError> {
         let mut p: Dictionary = plist::from_bytes(bytes)?;
-        debug!("Read dictionary for rppairingfile: {p:#?}");
+        // Never log the parsed dictionary: it contains the Ed25519 private key
+        // used to authenticate this pairing relationship.
+        debug!("Parsing rppairing file ({} bytes)", bytes.len());
 
         let public_key = match p
             .remove("public_key")

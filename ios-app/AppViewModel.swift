@@ -286,11 +286,9 @@ final class AppViewModel: ObservableObject {
     }
 
     func deletePairingFile() {
-        let path = PairingController.pairingFilePath()
-        try? FileManager.default.removeItem(atPath: path)
-        PairingController.customPairingFilePath = nil
+        PairingController.deleteStoredPairingCredentials()
         refreshPairingFile()
-        pairingStatus = "Pairing file deleted"
+        pairingStatus = "Pairing credentials deleted"
     }
 
     // MARK: - Network

@@ -61,15 +61,40 @@ final class PairingController: ObservableObject {
 
         if let data = try? Data(contentsOf: URL(fileURLWithPath: sourcePath)), !data.isEmpty {
             if sourcePath != aircardURL.path {
-                try? data.write(to: aircardURL, options: .atomic)
+                try? data.write(to: aircardURL, options: [.atomic, .completeFileProtection])
             }
             if sourcePath != airliftURL.path {
-                try? data.write(to: airliftURL, options: .atomic)
+                try? data.write(to: airliftURL, options: [.atomic, .completeFileProtection])
+            }
+            // The Rust pairing host may have created the source file directly;
+            // enforce complete file protection on both canonical copies.
+            for url in [aircardURL, airliftURL] where FileManager.default.fileExists(atPath: url.path) {
+                try? FileManager.default.setAttributes(
+                    [.protectionKey: FileProtectionType.complete],
+                    ofItemAtPath: url.path
+                )
             }
             customPairingFilePath = aircardURL.path
             return aircardURL.path
         }
         return sourcePath
+    }
+
+    /// Deletes every credential copy created or adopted by AirCard.
+    static func deleteStoredPairingCredentials() {
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        var paths: Set<String> = [
+            dir.appendingPathComponent("aircard_pairing.plist").path,
+            dir.appendingPathComponent("airlift_pairing.plist").path,
+        ]
+        if let custom = customPairingFilePath {
+            paths.insert(custom)
+        }
+        for path in paths {
+            try? FileManager.default.removeItem(atPath: path)
+        }
+        UserDefaults.standard.removeObject(forKey: altIRKKey)
+        customPairingFilePath = nil
     }
 
     /// Path where the pairing file is written or read from.
@@ -100,12 +125,17 @@ final class PairingController: ObservableObject {
             }
         }
 
-        // Scan Documents directory for any .plist file
+        // Only adopt files that are clearly pairing credentials. Treating every
+        // arbitrary plist in Documents as a pairing record can copy unrelated
+        // imported data into the credential filenames.
         if let files = try? FileManager.default.contentsOfDirectory(atPath: dir.path) {
-            let plists = files.filter {
-                $0.hasSuffix(".plist") || $0.hasSuffix(".mobiledevicepairing") || $0.hasSuffix(".mobilepair")
+            let pairingFiles = files.filter {
+                let lower = $0.lowercased()
+                return lower.hasSuffix(".mobiledevicepairing")
+                    || lower.hasSuffix(".mobilepair")
+                    || (lower.hasSuffix(".plist") && lower.contains("pair"))
             }
-            for candidate in plists {
+            for candidate in pairingFiles {
                 let candidatePath = dir.appendingPathComponent(candidate).path
                 let size = (try? FileManager.default.attributesOfItem(atPath: candidatePath)[.size] as? Int) ?? 0
                 if size > 0 {
