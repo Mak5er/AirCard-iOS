@@ -14,7 +14,7 @@ settings:
     # AirliftFFI is arm64-only (aws-lc-rs / idevice); drop x86_64 simulator slice.
     EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
     CODE_SIGN_STYLE: Automatic
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: "8ZW729946Z"
 
 targets:
   AirCard-iOS:
@@ -28,7 +28,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: "AirCard-iOS"
-        PRODUCT_BUNDLE_IDENTIFIER: com.mak5er.aircard
+        PRODUCT_BUNDLE_IDENTIFIER: com.civati.aircard.kshitij
         INFOPLIST_FILE: ios-app/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # idevice's static lib pulls in C++ symbols (aws-lc); link libc++.
