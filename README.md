@@ -50,6 +50,15 @@ The app communicates with internal system services over a local loopback tunnel 
 - **On-device pairing (iOS 27+)**: Advertises locally over Bonjour so the phone can pair with itself via Settings > Privacy & Security > Developer Mode > Pair with AirCard-iOS.
 - **Safe unpairing**: Easily delete the active pairing file to re-pair or switch pairing credentials at any time.
 
+## Community Resources
+
+- [AirCards](https://aircards.org/) — An independent community for discovering
+  and sharing Apple Wallet card artwork. Browse designs, download artwork
+  for use with AirCard-iOS, or share your own creations.
+
+AirCards is maintained independently and is not affiliated with the
+AirCard-iOS project.
+
 ## Prerequisites
 
 1. **iOS 27+** (for on-device Settings pairing) or **Any supported iOS version** when using an imported pairing file (e.g. from SideStore / iLoader).
