@@ -120,4 +120,27 @@ final class TendiesEngineTests: XCTestCase {
         XCTAssertEqual(found.count, 1)
         XCTAssertEqual(found.first?.ext, "com.apple.MercuryPoster")
     }
+
+    @MainActor
+    func testDocumentsTendieIsMovedIntoStorage() throws {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let name = "dropped_\(UUID().uuidString).tendies"
+        let dropped = docs.appendingPathComponent(name)
+        let stored = TendiesEngine.tendiesStorageDirectory.appendingPathComponent(name)
+        try Data().write(to: dropped)
+        defer {
+            try? FileManager.default.removeItem(at: dropped)
+            try? FileManager.default.removeItem(at: stored)
+        }
+
+        // init scans Documents and picks up the dropped archive.
+        let vm = AppViewModel()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: stored.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dropped.path))
+
+        // Deleting the wallpaper removes the stored archive; the next scan must not bring it back.
+        try FileManager.default.removeItem(at: stored)
+        vm.scanDocumentsForTendies()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stored.path))
+    }
 }

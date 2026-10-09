@@ -161,7 +161,9 @@ final class AppViewModel: ObservableObject {
             for u in rootItems where u.pathExtension.lowercased() == "tendies" {
                 let target = tendiesDir.appendingPathComponent(u.lastPathComponent)
                 if u.path != target.path && !FileManager.default.fileExists(atPath: target.path) {
-                    try? FileManager.default.copyItem(at: u, to: target)
+                    // Move rather than copy: a copy left in Documents would be
+                    // imported again on the next scan after the wallpaper is deleted.
+                    try? FileManager.default.moveItem(at: u, to: target)
                 }
                 foundURLs.append(target)
             }
